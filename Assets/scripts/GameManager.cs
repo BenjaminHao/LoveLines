@@ -25,6 +25,7 @@ public class GameManager : MonoBehaviour
     public float spawnDelay = 0.5f;
     private Vector2 touchStartPosition = Vector2.zero;
     private RaycastHit2D hit;
+    private bool lineDestroyed;
 
     private enum State
     {
@@ -47,6 +48,7 @@ public class GameManager : MonoBehaviour
     private void Awake()
     {
         state = State.Loaded;
+        lineDestroyed = false;
         dottedLineStatus = DottedLineStatus.none;
         balls = new List<GameObject>();
 
@@ -94,7 +96,7 @@ public class GameManager : MonoBehaviour
 #endif
                 if (swipeControls.SwipingLeft || swipeControls.SwipingRight)
                 {
-                    //DottedLine.Instance.DestoryDottedLine();
+                    //DottedLine.Instance.DestroyDottedLine();
                     if (hit.collider != null && hit.collider.tag == "Line") return;
                     if (IsInBounds(touchStartPosition))
                     {
@@ -103,7 +105,7 @@ public class GameManager : MonoBehaviour
                 }
                 if (swipeControls.SwipingUp || swipeControls.SwipingDown)
                 {
-                    //DottedLine.Instance.DestoryDottedLine();
+                    //DottedLine.Instance.DestroyDottedLine();
                     if (hit.collider != null && hit.collider.tag == "Line") return;
                     if (IsInBounds(touchStartPosition))
                     {
@@ -132,7 +134,8 @@ public class GameManager : MonoBehaviour
                 {
                     if (hit.collider != null && hit.collider.tag == "Line")
                     {
-                        DestoryLine(hit.collider.gameObject);
+                        DestroyLine(hit.collider.gameObject);
+                        StartCoroutine(DestroyTrashLine());
                         FindBallFreePatch();
                     }
 
@@ -198,7 +201,9 @@ public class GameManager : MonoBehaviour
         else // sad ball
         {
             obj = Instantiate(ballPrefabs[6], p, transform.rotation);
-            GameObject _obj = Instantiate(ballPrefabs[6], Vector2.zero, transform.rotation);
+
+            Vector2 sadP = new Vector2(Random.Range(1, boardWidth - 1), Random.Range(1, boardHeight - 1));
+            GameObject _obj = Instantiate(ballPrefabs[6], sadP, transform.rotation);
             _obj.transform.SetParent(this.transform);
             _obj.layer = 2;
             balls.Add(_obj); // Make sure we spawn 2 sad balls
@@ -219,47 +224,51 @@ public class GameManager : MonoBehaviour
                 || (thisBall.value == loveBallValue || thatBall.value == loveBallValue));
     }
 
-    private IEnumerator UpgradeBall(GameObject toDestory, GameObject toUpgrade)
+    private IEnumerator UpgradeBall(GameObject toDestroy, GameObject toUpgrade)
     {
-        Vector3 toUpgradePosition = (toDestory.transform.position + toUpgrade.transform.position) / 2;                                                           
+        Vector3 toUpgradePosition = (toDestroy.transform.position + toUpgrade.transform.position) / 2;                                                           
         timeControls.DoSlowmotion();
-        toDestory.GetComponent<Ball>().upgradeBall = toUpgrade;
-        toUpgrade.GetComponent<Ball>().upgradeBall = toDestory;
-        toDestory.GetComponent<Ball>().readyToUpgrade = true;
+        toDestroy.GetComponent<Ball>().upgradeBall = toUpgrade;
+        toUpgrade.GetComponent<Ball>().upgradeBall = toDestroy;
+        toDestroy.GetComponent<Ball>().readyToUpgrade = true;
         toUpgrade.GetComponent<Ball>().readyToUpgrade = true;
 
         //SimplePool.Despawn(toUpgrade);
-        //SimplePool.Despawn(toDestory);
-        yield return new WaitUntil(() => toDestory.GetComponent<Ball>().touched == true);
+        //SimplePool.Despawn(toDestroy);
+        yield return new WaitUntil(() => toDestroy.GetComponent<Ball>().touched == true);
 
-        balls.Remove(toDestory);
+        balls.Remove(toDestroy);
         balls.Remove(toUpgrade);
-        Destroy(toDestory);
+        Destroy(toDestroy);
         Destroy(toUpgrade);
 
-        if (toUpgrade.GetComponent<Ball>().value == 5 || toDestory.GetComponent<Ball>().value == 5) // Final ball
+        if (toUpgrade.GetComponent<Ball>().value == 5 || toDestroy.GetComponent<Ball>().value == 5) // Final ball
         {
             // TODO: animation?
 
         }
-        else if (toUpgrade.GetComponent<Ball>().value == 6 && toDestory.GetComponent<Ball>().value != 7) // Love ball
+        else if (toUpgrade.GetComponent<Ball>().value == 6 && toDestroy.GetComponent<Ball>().value != 7) // Love ball
         {
-            GameObject newBall = Instantiate(ballPrefabs[toDestory.GetComponent<Ball>().value], toUpgradePosition, transform.rotation);
+            GameObject newBall = Instantiate(ballPrefabs[toDestroy.GetComponent<Ball>().value], toUpgradePosition, transform.rotation);
             newBall.transform.SetParent(this.transform);
             newBall.layer = 2;
             balls.Add(newBall);
         }
-        else if (toDestory.GetComponent<Ball>().value == 6 && toUpgrade.GetComponent<Ball>().value != 7) // Love ball
+        else if (toDestroy.GetComponent<Ball>().value == 6 && toUpgrade.GetComponent<Ball>().value != 7) // Love ball
         {
             GameObject newBall = Instantiate(ballPrefabs[toUpgrade.GetComponent<Ball>().value], toUpgradePosition, transform.rotation);
             newBall.transform.SetParent(this.transform);
             newBall.layer = 2;
             balls.Add(newBall);
         }
-        else if (toUpgrade.GetComponent<Ball>().value == 7 || toDestory.GetComponent<Ball>().value == 7) // Sad ball
+        else if (toDestroy.GetComponent<Ball>().value == 6 && toUpgrade.GetComponent<Ball>().value == 6) //  2 Love balls? How lucky you are!
+        {
+            // easter egg?
+        }
+        else if (toUpgrade.GetComponent<Ball>().value == 7 || toDestroy.GetComponent<Ball>().value == 7) // Sad ball
         {
             // Just destory the other ball
-            if (toUpgrade.GetComponent<Ball>().value == 1 || toDestory.GetComponent<Ball>().value == 1)
+            if (toUpgrade.GetComponent<Ball>().value == 1 || toDestroy.GetComponent<Ball>().value == 1)
             {
                 // But if the other ball is value 1 ball
                 // Lose game 
@@ -289,13 +298,13 @@ public class GameManager : MonoBehaviour
         if (hit1.collider && hit2.collider != null && !Released && 
             (dottedLineStatus == DottedLineStatus.leftRight || dottedLineStatus == DottedLineStatus.none))
         {
-            DottedLine.Instance.DestoryDottedLine();
+            DottedLine.Instance.DestroyDottedLine();
             DottedLine.Instance.DrawDottedLine(hit1.point, hit2.point);
             dottedLineStatus = DottedLineStatus.upDown;
         }
         else if (hit1.collider && hit2.collider != null && Released)
         {
-            DottedLine.Instance.DestoryDottedLine();
+            DottedLine.Instance.DestroyDottedLine();
             GameObject lineGO = Instantiate(linePrefab);
             lines.Add(lineGO);
             activeLine = lineGO.GetComponent<Line>();
@@ -325,13 +334,13 @@ public class GameManager : MonoBehaviour
         if (hit1.collider && hit2.collider != null && !Released && 
             (dottedLineStatus == DottedLineStatus.upDown || dottedLineStatus == DottedLineStatus.none))
         {
-            DottedLine.Instance.DestoryDottedLine();
+            DottedLine.Instance.DestroyDottedLine();
             DottedLine.Instance.DrawDottedLine(hit1.point, hit2.point);
             dottedLineStatus = DottedLineStatus.leftRight;
         }
         else if (hit1.collider && hit2.collider != null && Released)
         {
-            DottedLine.Instance.DestoryDottedLine();
+            DottedLine.Instance.DestroyDottedLine();
             GameObject lineGO = Instantiate(linePrefab);
             lines.Add(lineGO);
             activeLine = lineGO.GetComponent<Line>();
@@ -352,7 +361,7 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    private void DestoryLine(GameObject line)
+    private void DestroyLine(GameObject line)
     {
         Vector2 lineP = line.transform.position;
         int minX = Mathf.RoundToInt(line.GetComponent<BoxCollider2D>().bounds.min.x);
@@ -360,6 +369,7 @@ public class GameManager : MonoBehaviour
         int minY = Mathf.RoundToInt(line.GetComponent<BoxCollider2D>().bounds.min.y);
         int maxY = Mathf.RoundToInt(line.GetComponent<BoxCollider2D>().bounds.max.y);
         //Debug.Log("minX " + minX + " maxX " + maxX + " minY " + minY + " maxY" + maxY);
+        //Debug.Log(line.GetComponent<BoxCollider2D>().size);
 
         if (maxX - minX == 1)
         {
@@ -379,7 +389,26 @@ public class GameManager : MonoBehaviour
         }
         lines.Remove(line);
         Destroy(line);
+        lineDestroyed = true;
     }
+
+    private IEnumerator DestroyTrashLine()
+    {
+        yield return new WaitUntil(() => lineDestroyed == true);
+        GameObject[] allLines = GameObject.FindGameObjectsWithTag("Line");
+        foreach (GameObject line in allLines)
+        {
+            if ((Mathf.RoundToInt(line.GetComponent<BoxCollider2D>().bounds.max.x) == boardWidth && Mathf.RoundToInt(line.GetComponent<BoxCollider2D>().bounds.min.x) == 0)
+                || (Mathf.RoundToInt(line.GetComponent<BoxCollider2D>().bounds.max.y) == boardHeight && Mathf.RoundToInt(line.GetComponent<BoxCollider2D>().bounds.min.y) == 0))
+            {}
+            else
+            {
+                DestroyLine(line);
+            }
+        }
+        lineDestroyed = false;
+    }
+
 #endregion
 
 #region private methods (Board)

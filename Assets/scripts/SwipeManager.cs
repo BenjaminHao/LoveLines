@@ -88,7 +88,7 @@ public class SwipeManager : MonoBehaviour {
     {
         isDraging = false;
         startTouch = Vector2.zero;
-        DottedLine.Instance.DestoryDottedLine();
+        DottedLine.Instance.DestroyDottedLine();
     }
 
     public Vector2 SwipeDelta

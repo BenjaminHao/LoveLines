@@ -29,7 +29,7 @@ public class DottedLine : MonoBehaviour
     List<Vector2> positions = new List<Vector2>();
     List<GameObject> dots = new List<GameObject>();
 
-    public void DestoryDottedLine()
+    public void DestroyDottedLine()
     {
         if (positions.Count > 0)
         {
