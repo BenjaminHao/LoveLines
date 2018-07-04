@@ -6,7 +6,9 @@ public class Ball : MonoBehaviour
     public int power;
     public Rigidbody2D rb;
     public bool readyToUpgrade = false;
-    public Vector2 upgradePos;
+    public bool touched = false;
+    public GameObject upgradeBall;
+    float timeStamp;
     // Use this for initialization
     void Start()
     {
@@ -17,7 +19,7 @@ public class Ball : MonoBehaviour
     void Update()
     {
         if (readyToUpgrade) 
-            ReadyToUpgrade(upgradePos);
+            ReadyToUpgrade(upgradeBall);
         else
             // fixed speed
             rb.velocity = power * (rb.velocity.normalized);
@@ -25,15 +27,18 @@ public class Ball : MonoBehaviour
 
     private void OnCollisionEnter2D(Collision2D collision)
     {
-        if (collision.collider.tag == "Ball" && readyToUpgrade)
+        touched |= (collision.collider.tag == "Ball" && readyToUpgrade);
+        if (collision.collider.tag == "Line" && readyToUpgrade)
         {
-            Destroy(gameObject);
+            Physics2D.IgnoreCollision(collision.collider, GetComponent<Collider2D>());
         }
     }
 
-    private void ReadyToUpgrade(Vector2 pos)
+    private void ReadyToUpgrade(GameObject anotherBall)
     {
-        transform.position = Vector2.MoveTowards(new Vector2(transform.position.x, transform.position.y),
-                                                           pos, 3 * Time.deltaTime);
+        timeStamp = Time.time;
+        anotherBall = upgradeBall;
+        Vector2 direction = -(transform.position - anotherBall.transform.position).normalized;
+        rb.velocity = new Vector2(direction.x, direction.y) * 50f * (Time.time / timeStamp);
     }
 }

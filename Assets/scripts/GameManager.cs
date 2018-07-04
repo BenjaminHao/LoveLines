@@ -13,14 +13,16 @@ public class GameManager : MonoBehaviour
     public int boardWidth, boardHeight;
 
     private static int lowestNewBallValue = 1;
-    private static int highestNewBallValue = 2;
+    private static int highestNewBallValue = 3;
+    private static int loveBallValue = 6;
+    private static int sadBallValue = 7;
     private int maxValue = 6;
     private int points;
     public List<GameObject> balls;
     public List<GameObject> lines;
     public SwipeManager swipeControls;
+    public TimeManager timeControls;
     public float spawnDelay = 0.5f;
-    private bool generated;
     private Vector2 touchStartPosition = Vector2.zero;
     private RaycastHit2D hit;
 
@@ -31,12 +33,21 @@ public class GameManager : MonoBehaviour
         GameOver
     }
 
+    private enum DottedLineStatus
+    {
+        upDown,
+        leftRight,
+        none
+    }
+
     private State state;
+    private DottedLineStatus dottedLineStatus;
 
     #region monodevelop
     private void Awake()
     {
         state = State.Loaded;
+        dottedLineStatus = DottedLineStatus.none;
         balls = new List<GameObject>();
 
         boardWidth = (int)gameBoard.transform.localScale.x;
@@ -53,14 +64,15 @@ public class GameManager : MonoBehaviour
                 break;
             case State.Loaded:
                 state = State.Playing;
-                StartCoroutine(GenerateRandomBall());
-                StartCoroutine(GenerateRandomBall());
-                StartCoroutine(GenerateRandomBall());
-                //GenerateRandomBall();
+                //StartCoroutine(GenerateRandomBall());
+                //StartCoroutine(GenerateRandomBall());
+                //StartCoroutine(GenerateRandomBall());
+                GenerateRandomBall();
+                GenerateRandomBall();
+                GenerateRandomBall();
                 break;
             case State.Playing:
-                if (!UpgradeableBallsLeft() && generated == false) { StartCoroutine(GenerateRandomBall()); }
-                FindBallFreePatch();
+                if (!UpgradeableBallsLeft()) { GenerateRandomBall();}
 #if UNITY_EDITOR
                 if (Input.GetMouseButtonDown(0))
                 {
@@ -82,34 +94,48 @@ public class GameManager : MonoBehaviour
 #endif
                 if (swipeControls.SwipingLeft || swipeControls.SwipingRight)
                 {
-                    DottedLine.Instance.DestoryDottedLine();
+                    //DottedLine.Instance.DestoryDottedLine();
                     if (hit.collider != null && hit.collider.tag == "Line") return;
                     if (IsInBounds(touchStartPosition))
-                    LeftRightGate(touchStartPosition, false);
+                    {
+                        LeftRightGate(touchStartPosition, false);
+                    }
                 }
                 if (swipeControls.SwipingUp || swipeControls.SwipingDown)
                 {
-                    DottedLine.Instance.DestoryDottedLine();
+                    //DottedLine.Instance.DestoryDottedLine();
                     if (hit.collider != null && hit.collider.tag == "Line") return;
                     if (IsInBounds(touchStartPosition))
-                    UpDownGate(touchStartPosition, false);
+                    {
+                        UpDownGate(touchStartPosition, false);
+                    }
                 }
                 if (swipeControls.SwippedLeft || swipeControls.SwippedRight)
                 {
                     if (hit.collider != null && hit.collider.tag == "Line") return;
                     if (IsInBounds(touchStartPosition))
-                    LeftRightGate(touchStartPosition, true);
+                    {
+                        LeftRightGate(touchStartPosition, true);
+                        FindBallFreePatch();
+                    }
                 }
                 if (swipeControls.SwipedUp || swipeControls.SwipedDown)
                 {
                     if (hit.collider != null && hit.collider.tag == "Line") return;
                     if (IsInBounds(touchStartPosition))
+                    {
                         UpDownGate(touchStartPosition, true);
+                        FindBallFreePatch();
+                    }
                 }
                 if (swipeControls.Tap)
                 {
                     if (hit.collider != null && hit.collider.tag == "Line")
+                    {
                         DestoryLine(hit.collider.gameObject);
+                        FindBallFreePatch();
+                    }
+
                 }
                 break;
         }
@@ -123,18 +149,29 @@ public class GameManager : MonoBehaviour
                              group balls by b.GetComponent<Ball>().value into v
                              where v.Count() > 1
                              select v.Key;
-        if (sameValueBalls.Count() > 0) { return true; }
+        if (sameValueBalls.Any()) { return true; }
         else return false;
         //return (balls.Count != balls.Distinct().Count());
     }
 
-    public IEnumerator GenerateRandomBall()
+    public void GenerateRandomBall()
     {
-        generated = true;
         int value;
         // find out if we are generaing a ball with the lowest or highest value
         float highOrLowChance = Random.Range(0f, 0.99f);
-        if (highOrLowChance >= 0.9f)
+        if (highOrLowChance >= 0.85f)
+        {
+            float halfhalf = Random.Range(0f, 0.99f);
+            if (halfhalf >= 0.5f)
+            {
+                value = loveBallValue;
+            }
+            else
+            {
+                value = sadBallValue;
+            }
+        }
+        else if (highOrLowChance >= 0.6f && highOrLowChance < 0.85f)
         {
             value = highestNewBallValue;
         }
@@ -144,57 +181,103 @@ public class GameManager : MonoBehaviour
         }
         // attempt to get the starting position
         Vector2 p = new Vector2(Random.Range(1, boardWidth - 1), Random.Range(1, boardHeight - 1));
-
         GameObject obj;
+
         if (value == lowestNewBallValue)
         {
             obj = Instantiate(ballPrefabs[0], p, transform.rotation);
-            //obj = SimplePool.Spawn(ballPrefabs[0], p, transform.rotation);
         }
-        else
+        else if (value == highestNewBallValue)
         {
             obj = Instantiate(ballPrefabs[1], p, transform.rotation);
-            //obj = SimplePool.Spawn(ballPrefabs[1], p, transform.rotation);
         }
+        else if (value == loveBallValue) // love ball
+        {
+            obj = Instantiate(ballPrefabs[5], p, transform.rotation);
+        }
+        else // sad ball
+        {
+            obj = Instantiate(ballPrefabs[6], p, transform.rotation);
+            GameObject _obj = Instantiate(ballPrefabs[6], Vector2.zero, transform.rotation);
+            _obj.transform.SetParent(this.transform);
+            _obj.layer = 2;
+            balls.Add(_obj); // Make sure we spawn 2 sad balls
+        }
+
         obj.transform.SetParent(this.transform);
         obj.layer = 2; // Layer = ignore raycast
         balls.Add(obj);
+
         //AnimationHandler ballAnimManager = obj.GetComponent<AnimationHandler>();
         //ballAnimManager.AnimateEntry();
-        yield return new WaitForSeconds(spawnDelay);
-        generated = false;
     }
 
     private bool CanUpgrade(Ball thisBall, Ball thatBall)
     {
-        return (thisBall.value != maxValue && thisBall.power == thatBall.power);
+        return (thisBall.value != maxValue && thisBall.power == thatBall.power
+                || (thisBall.value == sadBallValue || thatBall.value == sadBallValue)
+                || (thisBall.value == loveBallValue || thatBall.value == loveBallValue));
     }
 
-    private void UpgradeBall(GameObject toDestory, GameObject toUpgrade)
+    private IEnumerator UpgradeBall(GameObject toDestory, GameObject toUpgrade)
     {
         Vector3 toUpgradePosition = (toDestory.transform.position + toUpgrade.transform.position) / 2;                                                           
-            
+        timeControls.DoSlowmotion();
+        toDestory.GetComponent<Ball>().upgradeBall = toUpgrade;
+        toUpgrade.GetComponent<Ball>().upgradeBall = toDestory;
+        toDestory.GetComponent<Ball>().readyToUpgrade = true;
+        toUpgrade.GetComponent<Ball>().readyToUpgrade = true;
+
+        //SimplePool.Despawn(toUpgrade);
+        //SimplePool.Despawn(toDestory);
+        yield return new WaitUntil(() => toDestory.GetComponent<Ball>().touched == true);
+
         balls.Remove(toDestory);
         balls.Remove(toUpgrade);
         Destroy(toDestory);
         Destroy(toUpgrade);
 
-        if (toUpgrade.GetComponent<Ball>().value < 5)
+        if (toUpgrade.GetComponent<Ball>().value == 5 || toDestory.GetComponent<Ball>().value == 5) // Final ball
+        {
+            // TODO: animation?
+
+        }
+        else if (toUpgrade.GetComponent<Ball>().value == 6 && toDestory.GetComponent<Ball>().value != 7) // Love ball
+        {
+            GameObject newBall = Instantiate(ballPrefabs[toDestory.GetComponent<Ball>().value], toUpgradePosition, transform.rotation);
+            newBall.transform.SetParent(this.transform);
+            newBall.layer = 2;
+            balls.Add(newBall);
+        }
+        else if (toDestory.GetComponent<Ball>().value == 6 && toUpgrade.GetComponent<Ball>().value != 7) // Love ball
         {
             GameObject newBall = Instantiate(ballPrefabs[toUpgrade.GetComponent<Ball>().value], toUpgradePosition, transform.rotation);
             newBall.transform.SetParent(this.transform);
             newBall.layer = 2;
             balls.Add(newBall);
         }
-        else if (toUpgrade.GetComponent<Ball>().value == 5)
+        else if (toUpgrade.GetComponent<Ball>().value == 7 || toDestory.GetComponent<Ball>().value == 7) // Sad ball
         {
-            // TODO: animation?
+            // Just destory the other ball
+            if (toUpgrade.GetComponent<Ball>().value == 1 || toDestory.GetComponent<Ball>().value == 1)
+            {
+                // But if the other ball is value 1 ball
+                // Lose game 
+                state = State.GameOver;
+            }
+        }
+        else // normal balls
+        {
+            GameObject newBall = Instantiate(ballPrefabs[toUpgrade.GetComponent<Ball>().value], toUpgradePosition, transform.rotation);
+            newBall.transform.SetParent(this.transform);
+            newBall.layer = 2;
+            balls.Add(newBall);
+            //AnimationHandler ballAnim = newBall.GetComponent<AnimationHandler>();
+            //ballAnim.AnimateUpgrade();
         }
         //else if // other 2 balls
-
         points += toUpgrade.GetComponent<Ball>().value * 2;
-        //AnimationHandler ballAnim = newBall.GetComponent<AnimationHandler>();
-        //ballAnim.AnimateUpgrade();
+
     }
 #endregion
 
@@ -203,9 +286,12 @@ public class GameManager : MonoBehaviour
     {
         RaycastHit2D hit1 = Physics2D.Raycast(pos, Vector2.up, Mathf.Infinity);
         RaycastHit2D hit2 = Physics2D.Raycast(pos, Vector2.down, Mathf.Infinity);
-        if (hit1.collider && hit2.collider != null && !Released)
+        if (hit1.collider && hit2.collider != null && !Released && 
+            (dottedLineStatus == DottedLineStatus.leftRight || dottedLineStatus == DottedLineStatus.none))
         {
+            DottedLine.Instance.DestoryDottedLine();
             DottedLine.Instance.DrawDottedLine(hit1.point, hit2.point);
+            dottedLineStatus = DottedLineStatus.upDown;
         }
         else if (hit1.collider && hit2.collider != null && Released)
         {
@@ -228,6 +314,7 @@ public class GameManager : MonoBehaviour
                 //Debug.Log(new Vector2(XCod, i));
                 SetLineAt(new Vector2(XCod, i), true);
             }
+            dottedLineStatus = DottedLineStatus.none;
         }
     }
 
@@ -235,9 +322,12 @@ public class GameManager : MonoBehaviour
     {
         RaycastHit2D hit1 = Physics2D.Raycast(pos, Vector2.left, Mathf.Infinity);
         RaycastHit2D hit2 = Physics2D.Raycast(pos, Vector2.right, Mathf.Infinity);
-        if (hit1.collider && hit2.collider != null && !Released)
+        if (hit1.collider && hit2.collider != null && !Released && 
+            (dottedLineStatus == DottedLineStatus.upDown || dottedLineStatus == DottedLineStatus.none))
         {
+            DottedLine.Instance.DestoryDottedLine();
             DottedLine.Instance.DrawDottedLine(hit1.point, hit2.point);
+            dottedLineStatus = DottedLineStatus.leftRight;
         }
         else if (hit1.collider && hit2.collider != null && Released)
         {
@@ -258,6 +348,7 @@ public class GameManager : MonoBehaviour
             {
                 SetLineAt(new Vector2(i, YCod), true);
             }
+            dottedLineStatus = DottedLineStatus.none;
         }
     }
 
@@ -342,7 +433,7 @@ public class GameManager : MonoBehaviour
                         Ball thatball = ball2.GetComponent<Ball>();
                         if (CanUpgrade(thisball, thatball))
                         {
-                            UpgradeBall(ball1, ball2);
+                            StartCoroutine(UpgradeBall(ball1, ball2));
                         }
                     }
                     if (!ballDetected)
