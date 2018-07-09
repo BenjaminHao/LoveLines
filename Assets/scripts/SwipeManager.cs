@@ -2,22 +2,25 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class SwipeManager : MonoBehaviour {
-    
-    private bool tap, swipingLeft, swipingRight, swipingUp, swipingDown, swipedLeft, swipedRight, swipedUp, swipedDown;
+public class SwipeManager : MonoBehaviour
+{
+
+    private bool swipingLeft, swipingRight, swipingUp, swipingDown, swipedLeft, swipedRight, swipedUp, swipedDown;
     private bool isDraging = false;
-    public Vector2 startTouch, swipeDelta;
+    public Vector2 startTouch, perfectPos, swipeDelta;
     public float minSwipeDistance = 5.0f;
 
     private void Update()
     {
-        tap = swipingLeft = swipingRight = swipingUp = swipingDown = swipedLeft = swipedRight = swipedUp = swipedDown = false;
+        swipingLeft = swipingRight = swipingUp = swipingDown = swipedLeft = swipedRight = swipedUp = swipedDown = false;
 
         #region Standalone Inputs
         if (Input.GetMouseButtonDown(0))
         {
-            tap = isDraging = true;
+            isDraging = true;
             startTouch = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+            perfectPos = new Vector2(Mathf.Round(startTouch.x) + 0.5f,
+                                     Mathf.Round(startTouch.y) + 0.5f);
         }
         else if (Input.GetMouseButtonUp(0))
         {
@@ -30,8 +33,10 @@ public class SwipeManager : MonoBehaviour {
         {
             if (Input.touches[0].phase == TouchPhase.Began)
             {
-                tap = isDraging = true;
+                isDraging = true;
                 startTouch = Camera.main.ScreenToWorldPoint(Input.touches[0].position);
+                perfectPos = new Vector2(Mathf.Round(startTouch.x) + 0.5f,
+                                         Mathf.Round(startTouch.y) + 0.5f);
             }
             else if (Input.touches[0].phase == TouchPhase.Ended || Input.touches[0].phase == TouchPhase.Canceled)
             {
@@ -44,9 +49,9 @@ public class SwipeManager : MonoBehaviour {
         if (isDraging)
         {
             if (Input.touches.Length > 0)
-                swipeDelta = (Vector2)Camera.main.ScreenToWorldPoint(Input.touches[0].position) - startTouch;
+                swipeDelta = (Vector2)Camera.main.ScreenToWorldPoint(Input.touches[0].position) - perfectPos;
             else if (Input.GetMouseButton(0))
-                swipeDelta = (Vector2)Camera.main.ScreenToWorldPoint(Input.mousePosition) - startTouch;
+                swipeDelta = (Vector2)Camera.main.ScreenToWorldPoint(Input.mousePosition) - perfectPos;
         }
 
         // Did we cross the deadzone?
@@ -94,11 +99,6 @@ public class SwipeManager : MonoBehaviour {
     public Vector2 SwipeDelta
     {
         get { return swipeDelta; }
-    }
-
-    public bool Tap
-    {
-        get { return tap; }
     }
 
     public bool SwipingLeft

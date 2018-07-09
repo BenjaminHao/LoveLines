@@ -12,7 +12,8 @@ public class Ball : MonoBehaviour
     // Use this for initialization
     void Start()
     {
-        rb.velocity = new Vector2(power, power);
+        float speed = new Vector2(power, power).magnitude;
+        rb.velocity = speed * Random.insideUnitCircle; // random direction, fixed speed.
     }
 
     // Update is called once per frame
@@ -27,7 +28,11 @@ public class Ball : MonoBehaviour
 
     private void OnCollisionEnter2D(Collision2D collision)
     {
-        touched |= (collision.collider.tag == "Ball" && readyToUpgrade);
+        if (collision.collider.tag == "Ball" && readyToUpgrade)
+        {
+            touched = true;
+        }
+
         if (collision.collider.tag == "Line" && readyToUpgrade)
         {
             Physics2D.IgnoreCollision(collision.collider, GetComponent<Collider2D>());

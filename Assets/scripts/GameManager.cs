@@ -8,6 +8,9 @@ public class GameManager : MonoBehaviour
     public GameObject gameBoard;
     public GameObject[] ballPrefabs;
     public GameObject linePrefab;
+    public GameObject pressEffect;
+    public GameObject floatingTextPrefab;
+
     Line activeLine;
     public bool[,] grid;
     public int boardWidth, boardHeight;
@@ -22,10 +25,12 @@ public class GameManager : MonoBehaviour
     public List<GameObject> lines;
     public SwipeManager swipeControls;
     public TimeManager timeControls;
-    public float spawnDelay = 0.5f;
-    private Vector2 touchStartPosition = Vector2.zero;
+    public BGColorManager bgColorControls;
     private RaycastHit2D hit;
-    private bool lineDestroyed;
+    private GameObject _press;
+
+    private Vector2 startPos;
+    private Vector2 endPos;
 
     private enum State
     {
@@ -47,8 +52,11 @@ public class GameManager : MonoBehaviour
     #region monodevelop
     private void Awake()
     {
+        // set 60 fps for mobile devices
+        Application.targetFrameRate = 60;
+
+        // init games
         state = State.Loaded;
-        lineDestroyed = false;
         dottedLineStatus = DottedLineStatus.none;
         balls = new List<GameObject>();
 
@@ -66,21 +74,76 @@ public class GameManager : MonoBehaviour
                 break;
             case State.Loaded:
                 state = State.Playing;
-                //StartCoroutine(GenerateRandomBall());
-                //StartCoroutine(GenerateRandomBall());
-                //StartCoroutine(GenerateRandomBall());
                 GenerateRandomBall();
                 GenerateRandomBall();
                 GenerateRandomBall();
                 break;
             case State.Playing:
                 if (!UpgradeableBallsLeft()) { GenerateRandomBall();}
+
+                if (swipeControls.SwipingLeft || swipeControls.SwipingRight)
+                {
+                    //DottedLine.Instance.DestroyDottedLine();
+                    if (IsInBounds(swipeControls.perfectPos) && !GetLineAt(swipeControls.perfectPos))
+                    {
+                        HorizontalGate(swipeControls.perfectPos, false);
+                    }
+                }
+                if (swipeControls.SwipingUp || swipeControls.SwipingDown)
+                {
+                    //DottedLine.Instance.DestroyDottedLine();
+                    if (IsInBounds(swipeControls.perfectPos) && !GetLineAt(swipeControls.perfectPos))
+                    {
+                        VerticalGate(swipeControls.perfectPos, false);
+                    }
+                }
+                if (swipeControls.SwippedLeft || swipeControls.SwippedRight)
+                {
+                    if (IsInBounds(swipeControls.perfectPos) && !GetLineAt(swipeControls.perfectPos))
+                    {
+                        HorizontalGate(swipeControls.perfectPos, true);
+                        StartCoroutine(FindBallFreePatch());
+                    }
+                }
+                if (swipeControls.SwipedUp || swipeControls.SwipedDown)
+                {
+                    if (IsInBounds(swipeControls.perfectPos) && !GetLineAt(swipeControls.perfectPos))
+                    {
+                        VerticalGate(swipeControls.perfectPos, true);
+                        StartCoroutine(FindBallFreePatch());
+                    }
+                }
 #if UNITY_EDITOR
                 if (Input.GetMouseButtonDown(0))
                 {
-                    hit = Physics2D.Raycast(Camera.main.ScreenToWorldPoint(Input.mousePosition), Vector2.zero);
-                    touchStartPosition = new Vector2(Mathf.Round(swipeControls.startTouch.x) + 0.5f,
-                                                    Mathf.Round(swipeControls.startTouch.y) + 0.5f);
+                    Vector2 p = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+                    startPos = new Vector2(Mathf.Round(p.x) + 0.5f,
+                                           Mathf.Round(p.y) + 0.5f);
+                    if (pressEffect)
+                        _press = Instantiate(pressEffect, startPos, Quaternion.identity);
+                }
+                //if (Input.GetMouseButton(0))
+                //{
+                //    endPos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+                //    endTime = Time.time - startTime;
+                //    if (endPos == startPos && endTime >= 0.5f)
+                //    {
+                //        // indicator
+                //        Debug.Log("Worked");
+                //    }
+                //}
+
+                if (Input.GetMouseButtonUp(0))
+                {
+                    Vector2 p = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+                    endPos = new Vector2(Mathf.Round(p.x) + 0.5f,
+                                           Mathf.Round(p.y) + 0.5f);
+                    if (_press)
+                        Destroy(_press);
+                    if (startPos == endPos)
+                    {
+                        hit = Physics2D.CircleCast(Camera.main.ScreenToWorldPoint(Input.mousePosition), 1.5f, Vector2.zero);
+                    }
                 }
 #endif
 #if UNITY_IOS || UNITY_ANDROID
@@ -88,58 +151,46 @@ public class GameManager : MonoBehaviour
                 {
                     if (Input.touches[0].phase == TouchPhase.Began)
                     {
-                        hit = Physics2D.Raycast(Camera.main.ScreenToWorldPoint(Input.touches[0].position), Vector2.zero);
-                        touchStartPosition = new Vector2(Mathf.Round(swipeControls.startTouch.x) + 0.5f,
-                                                    Mathf.Round(swipeControls.startTouch.y) + 0.5f);
+                        Vector2 p = Camera.main.ScreenToWorldPoint(Input.touches[0].position);
+                        startPos = new Vector2(Mathf.Round(p.x) + 0.5f,
+                                                Mathf.Round(p.y) + 0.5f);
+                        if (pressEffect)
+                        {
+                            _press = Instantiate(pressEffect, startPos, Quaternion.identity);
+                        }
+
                     }
+                    //if (Input.touches[0].phase == TouchPhase.Stationary)
+                    //{
+                    //    endPos = Camera.main.ScreenToWorldPoint(Input.touches[0].position);
+                    //    endTime = Time.time - startTime;
+                    //    if (endPos == startPos && endTime >= 0.5f && !runonce)
+                    //    {
+                    //        // indicator
+                    //        runonce = true;
+                    //    }
+                    //}
+                    if (Input.touches[0].phase == TouchPhase.Ended || Input.touches[0].phase == TouchPhase.Canceled)
+                    {
+                        Vector2 p = Camera.main.ScreenToWorldPoint(Input.touches[0].position);
+                        endPos = new Vector2(Mathf.Round(p.x) + 0.5f,
+                                             Mathf.Round(p.y) + 0.5f);
+                        if (_press)
+                            Destroy(_press);
+                        if (startPos == endPos)
+                        {
+                            hit = Physics2D.CircleCast(Camera.main.ScreenToWorldPoint(Input.touches[0].position), 1.5f, Vector2.zero);
+                        }
+                    }
+                }
+                if (hit.collider != null && hit.collider.tag == "Line")
+                {
+                    DestroyLine(hit.collider.gameObject);
+                    DestroyTrashLine();
+                    //StartCoroutine(DestroyTrashLine());
+                    StartCoroutine(FindBallFreePatch());
                 }
 #endif
-                if (swipeControls.SwipingLeft || swipeControls.SwipingRight)
-                {
-                    //DottedLine.Instance.DestroyDottedLine();
-                    if (hit.collider != null && hit.collider.tag == "Line") return;
-                    if (IsInBounds(touchStartPosition))
-                    {
-                        LeftRightGate(touchStartPosition, false);
-                    }
-                }
-                if (swipeControls.SwipingUp || swipeControls.SwipingDown)
-                {
-                    //DottedLine.Instance.DestroyDottedLine();
-                    if (hit.collider != null && hit.collider.tag == "Line") return;
-                    if (IsInBounds(touchStartPosition))
-                    {
-                        UpDownGate(touchStartPosition, false);
-                    }
-                }
-                if (swipeControls.SwippedLeft || swipeControls.SwippedRight)
-                {
-                    if (hit.collider != null && hit.collider.tag == "Line") return;
-                    if (IsInBounds(touchStartPosition))
-                    {
-                        LeftRightGate(touchStartPosition, true);
-                        FindBallFreePatch();
-                    }
-                }
-                if (swipeControls.SwipedUp || swipeControls.SwipedDown)
-                {
-                    if (hit.collider != null && hit.collider.tag == "Line") return;
-                    if (IsInBounds(touchStartPosition))
-                    {
-                        UpDownGate(touchStartPosition, true);
-                        FindBallFreePatch();
-                    }
-                }
-                if (swipeControls.Tap)
-                {
-                    if (hit.collider != null && hit.collider.tag == "Line")
-                    {
-                        DestroyLine(hit.collider.gameObject);
-                        StartCoroutine(DestroyTrashLine());
-                        FindBallFreePatch();
-                    }
-
-                }
                 break;
         }
     }
@@ -233,8 +284,6 @@ public class GameManager : MonoBehaviour
         toDestroy.GetComponent<Ball>().readyToUpgrade = true;
         toUpgrade.GetComponent<Ball>().readyToUpgrade = true;
 
-        //SimplePool.Despawn(toUpgrade);
-        //SimplePool.Despawn(toDestroy);
         yield return new WaitUntil(() => toDestroy.GetComponent<Ball>().touched == true);
 
         balls.Remove(toDestroy);
@@ -242,20 +291,32 @@ public class GameManager : MonoBehaviour
         Destroy(toDestroy);
         Destroy(toUpgrade);
 
-        if (toUpgrade.GetComponent<Ball>().value == 5 || toDestroy.GetComponent<Ball>().value == 5) // Final ball
+        if (toUpgrade.GetComponent<Ball>().value == 5 && toDestroy.GetComponent<Ball>().value == 5) // Final ball
         {
             // TODO: animation?
 
+            // Floating Text
+            if (floatingTextPrefab)
+                ShowFloatingText(toUpgradePosition, "two 5 balls");
+            bgColorControls.ChangeColor(toDestroy.GetComponent<Ball>().value);
         }
-        else if (toUpgrade.GetComponent<Ball>().value == 6 && toDestroy.GetComponent<Ball>().value != 7) // Love ball
+        else if (toUpgrade.GetComponent<Ball>().value == 6 && toDestroy.GetComponent<Ball>().value != 6 && toDestroy.GetComponent<Ball>().value != 7) // Love ball
         {
+            if (floatingTextPrefab)
+                ShowFloatingText(toUpgradePosition, "1 love ball");
+            bgColorControls.ChangeColor(toDestroy.GetComponent<Ball>().value);
+
             GameObject newBall = Instantiate(ballPrefabs[toDestroy.GetComponent<Ball>().value], toUpgradePosition, transform.rotation);
             newBall.transform.SetParent(this.transform);
             newBall.layer = 2;
             balls.Add(newBall);
         }
-        else if (toDestroy.GetComponent<Ball>().value == 6 && toUpgrade.GetComponent<Ball>().value != 7) // Love ball
+        else if (toDestroy.GetComponent<Ball>().value == 6 && toUpgrade.GetComponent<Ball>().value != 6 && toUpgrade.GetComponent<Ball>().value != 7) // Love ball
         {
+            if (floatingTextPrefab)
+                ShowFloatingText(toUpgradePosition, "1 love ball");
+            bgColorControls.ChangeColor(toUpgrade.GetComponent<Ball>().value);
+
             GameObject newBall = Instantiate(ballPrefabs[toUpgrade.GetComponent<Ball>().value], toUpgradePosition, transform.rotation);
             newBall.transform.SetParent(this.transform);
             newBall.layer = 2;
@@ -263,20 +324,38 @@ public class GameManager : MonoBehaviour
         }
         else if (toDestroy.GetComponent<Ball>().value == 6 && toUpgrade.GetComponent<Ball>().value == 6) //  2 Love balls? How lucky you are!
         {
-            // easter egg?
+            if (floatingTextPrefab)
+                ShowFloatingText(toUpgradePosition, "2 love balls");
+            bgColorControls.ChangeColor(toDestroy.GetComponent<Ball>().value);
+
+            // easter egg? Destroy all balls?
         }
         else if (toUpgrade.GetComponent<Ball>().value == 7 || toDestroy.GetComponent<Ball>().value == 7) // Sad ball
         {
-            // Just destory the other ball
+            // Just destroy the other ball
             if (toUpgrade.GetComponent<Ball>().value == 1 || toDestroy.GetComponent<Ball>().value == 1)
             {
                 // But if the other ball is value 1 ball
                 // Lose game 
+                if (floatingTextPrefab)
+                    ShowFloatingText(toUpgradePosition, "GameOver");
+                bgColorControls.ChangeColor(7); // black
+
                 state = State.GameOver;
+            }
+            else
+            {
+                if (floatingTextPrefab)
+                    ShowFloatingText(toUpgradePosition, "Destroy");
+                bgColorControls.ChangeColor(0); // white
             }
         }
         else // normal balls
         {
+            if (floatingTextPrefab)
+                ShowFloatingText(toUpgradePosition, "Regular");
+            bgColorControls.ChangeColor(toDestroy.GetComponent<Ball>().value);
+
             GameObject newBall = Instantiate(ballPrefabs[toUpgrade.GetComponent<Ball>().value], toUpgradePosition, transform.rotation);
             newBall.transform.SetParent(this.transform);
             newBall.layer = 2;
@@ -291,7 +370,7 @@ public class GameManager : MonoBehaviour
 #endregion
 
 #region private methods (Lines)
-    private void UpDownGate(Vector2 pos, bool Released)
+    private void VerticalGate(Vector2 pos, bool Released)
     {
         RaycastHit2D hit1 = Physics2D.Raycast(pos, Vector2.up, Mathf.Infinity);
         RaycastHit2D hit2 = Physics2D.Raycast(pos, Vector2.down, Mathf.Infinity);
@@ -311,7 +390,6 @@ public class GameManager : MonoBehaviour
             if (activeLine != null)
             {
                 activeLine.DrawLine(hit1.point, hit2.point);
-
             }
             int XCod = (int)hit1.point.x;
             int minYCod = Mathf.RoundToInt(hit2.point.y);
@@ -327,7 +405,7 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    private void LeftRightGate(Vector2 pos, bool Released)
+    private void HorizontalGate(Vector2 pos, bool Released)
     {
         RaycastHit2D hit1 = Physics2D.Raycast(pos, Vector2.left, Mathf.Infinity);
         RaycastHit2D hit2 = Physics2D.Raycast(pos, Vector2.right, Mathf.Infinity);
@@ -355,6 +433,7 @@ public class GameManager : MonoBehaviour
             //Debug.Log(minXCod + ", " + maxXCod);
             for (int i = minXCod; i <= maxXCod; i++)
             {
+                //Debug.Log(new Vector2(i, YCod));
                 SetLineAt(new Vector2(i, YCod), true);
             }
             dottedLineStatus = DottedLineStatus.none;
@@ -363,7 +442,6 @@ public class GameManager : MonoBehaviour
 
     private void DestroyLine(GameObject line)
     {
-        Vector2 lineP = line.transform.position;
         int minX = Mathf.RoundToInt(line.GetComponent<BoxCollider2D>().bounds.min.x);
         int maxX = Mathf.RoundToInt(line.GetComponent<BoxCollider2D>().bounds.max.x);
         int minY = Mathf.RoundToInt(line.GetComponent<BoxCollider2D>().bounds.min.y);
@@ -371,7 +449,7 @@ public class GameManager : MonoBehaviour
         //Debug.Log("minX " + minX + " maxX " + maxX + " minY " + minY + " maxY" + maxY);
         //Debug.Log(line.GetComponent<BoxCollider2D>().size);
 
-        if (maxX - minX == 1)
+        if (maxX - minX == 1) // vertical line
         {
             for (int i = minY; i < maxY; i++)
             {
@@ -379,7 +457,7 @@ public class GameManager : MonoBehaviour
                 SetLineAt(new Vector2(minX, i), false);
             }
         }
-        else if (maxY - minY == 1)
+        if (maxY - minY == 1) // horizontal line
         {
             for (int i = minX; i < maxX; i++)
             {
@@ -389,24 +467,39 @@ public class GameManager : MonoBehaviour
         }
         lines.Remove(line);
         Destroy(line);
-        lineDestroyed = true;
     }
 
-    private IEnumerator DestroyTrashLine()
+    private void DestroyTrashLine()
     {
-        yield return new WaitUntil(() => lineDestroyed == true);
         GameObject[] allLines = GameObject.FindGameObjectsWithTag("Line");
         foreach (GameObject line in allLines)
         {
-            if ((Mathf.RoundToInt(line.GetComponent<BoxCollider2D>().bounds.max.x) == boardWidth && Mathf.RoundToInt(line.GetComponent<BoxCollider2D>().bounds.min.x) == 0)
-                || (Mathf.RoundToInt(line.GetComponent<BoxCollider2D>().bounds.max.y) == boardHeight && Mathf.RoundToInt(line.GetComponent<BoxCollider2D>().bounds.min.y) == 0))
-            {}
-            else
+            if (line != null && !line.GetComponent<Line>()._isGoodLine)
             {
-                DestroyLine(line);
+                int minX = Mathf.RoundToInt(line.GetComponent<BoxCollider2D>().bounds.min.x);
+                int maxX = Mathf.RoundToInt(line.GetComponent<BoxCollider2D>().bounds.max.x);
+                int minY = Mathf.RoundToInt(line.GetComponent<BoxCollider2D>().bounds.min.y);
+                int maxY = Mathf.RoundToInt(line.GetComponent<BoxCollider2D>().bounds.max.y);
+                if (maxX - minX == 1) // vertical line
+                {
+                    RaycastHit2D hit1 = Physics2D.Raycast(new Vector2((minX + maxX) / 2, minY - 0.8f), Vector2.down, 0.1f);
+                    RaycastHit2D hit2 = Physics2D.Raycast(new Vector2((minX + maxX) / 2, maxY + 0.8f), Vector2.up, 0.1f);
+                    if (hit1.collider == null || hit2.collider == null)
+                    {
+                        DestroyLine(line);
+                    }
+                }
+                if (maxY - minY == 1)
+                {
+                    RaycastHit2D hit1 = Physics2D.Raycast(new Vector2(minX - 0.8f, (minY + maxY) / 2), Vector2.left, 0.1f);
+                    RaycastHit2D hit2 = Physics2D.Raycast(new Vector2(maxX + 0.8f, (minY + maxY) / 2), Vector2.right, 0.1f);
+                    if (hit1.collider == null || hit2.collider == null)
+                    {
+                        DestroyLine(line);
+                    }
+                }
             }
         }
-        lineDestroyed = false;
     }
 
 #endregion
@@ -427,8 +520,9 @@ public class GameManager : MonoBehaviour
         grid[(int)v.x, (int)v.y] = b;
     }
 
-    private void FindBallFreePatch()
+    private IEnumerator FindBallFreePatch()
     {
+        yield return new WaitForSeconds(0.1f); // add some check delay
         bool[,] visited = new bool[boardWidth, boardHeight];
         int nRegions = 0;
         for (int i = 0; i < boardWidth; i++)
@@ -494,6 +588,12 @@ public class GameManager : MonoBehaviour
         {
             FloodFill(i, j + 1, visited, region);
         }
+    }
+
+    private void ShowFloatingText(Vector2 pos, string desplayText)
+    {
+        var go = Instantiate(floatingTextPrefab, pos, Quaternion.identity);
+        go.GetComponentInChildren<TextMesh>().text = desplayText;
     }
 #endregion
 }
